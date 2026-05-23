@@ -391,15 +391,24 @@ export default function App() {
       const urlParam = params.get('supa_url');
       const keyParam = params.get('supa_key');
       if (urlParam && keyParam) {
-        localStorage.setItem('bulog_supabase_url', decodeURIComponent(urlParam));
-        localStorage.setItem('bulog_supabase_anon_key', decodeURIComponent(keyParam));
+        let finalUrl = urlParam;
+        let finalKey = keyParam;
+        try {
+          finalUrl = decodeURIComponent(urlParam);
+        } catch (_) {}
+        try {
+          finalKey = decodeURIComponent(keyParam);
+        } catch (_) {}
+
+        localStorage.setItem('bulog_supabase_url', finalUrl.trim());
+        localStorage.setItem('bulog_supabase_anon_key', finalKey.trim());
         
         // Clear parameters immediately to keep URL pristine
         const cleanedUrl = window.location.origin + window.location.pathname;
         window.history.replaceState({}, document.title, cleanedUrl);
         
         // Force reload and refresh state seamlessly
-        alert('✅ Sinkronisasi Berhasil Nama!\nPerangkat Handphone/Laptop Anda telah saling terhubung melalui database online Supabase secara realtime!');
+        alert('✅ Sinkronisasi Berhasil!\n\nPerangkat Handphone & Laptop Anda sekarang telah terhubung ke database online Supabase yang sama secara realtime!');
         window.location.reload();
       }
     }
@@ -576,8 +585,50 @@ export default function App() {
       }
     }, 6000);
 
+    // 3. Fallback Polling interval to secure absolute cross-device synchronisation (e.g., if Supabase Realtime/Replication is disabled or blocked)
+    const fallbackSyncInterval = setInterval(async () => {
+      try {
+        const { data: queueData } = await supabase!.from('current_queue').select('*').eq('id', 1).single();
+        if (queueData) {
+          // Compare fields systematically to prevent redundant state re-renders
+          setCurrentQueue(prev => {
+            if (
+              prev.nomor_sekarang !== queueData.nomor_sekarang || 
+              prev.status !== queueData.status || 
+              prev.total_antrian !== queueData.total_antrian || 
+              prev.updated_at !== queueData.updated_at
+            ) {
+              localStorage.setItem('bulog_queue_state', JSON.stringify(queueData));
+              return queueData;
+            }
+            return prev;
+          });
+          setConnectionStatus('connected');
+        }
+        
+        // Poll logs to ensure logs match
+        const { data: logsData } = await supabase!
+          .from('logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(500);
+        if (logsData) {
+          setLogs(prev => {
+            if (prev.length !== logsData.length || (prev[0] && logsData[0] && prev[0].id !== logsData[0].id)) {
+              localStorage.setItem('bulog_queue_logs', JSON.stringify(logsData));
+              return logsData;
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.warn('Fallback sync failed:', err);
+      }
+    }, 2000); // Poll every 2 seconds for high response speed
+
     return () => {
       clearInterval(reconnectInterval);
+      clearInterval(fallbackSyncInterval);
       supabase.removeChannel(queueChannel);
     };
   }, [tempSupaUrl, tempSupaKey]);
@@ -2258,8 +2309,12 @@ export default function App() {
               {(() => {
                 const activeSupaCreds = getSupabaseCredentials();
                 if (!activeSupaCreds.url || !activeSupaCreds.key) return null;
-                const shareLink = typeof window !== 'undefined'
-                  ? `${window.location.origin}?supa_url=${encodeURIComponent(activeSupaCreds.url)}&supa_key=${encodeURIComponent(activeSupaCreds.key)}`
+                let baseOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+                if (baseOrigin.includes('ais-dev-')) {
+                  baseOrigin = baseOrigin.replace('ais-dev-', 'ais-pre-');
+                }
+                const shareLink = baseOrigin
+                  ? `${baseOrigin}/admin?supa_url=${encodeURIComponent(activeSupaCreds.url)}&supa_key=${encodeURIComponent(activeSupaCreds.key)}`
                   : '';
                 const qrCodeUrl = shareLink
                   ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(shareLink)}`
