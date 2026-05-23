@@ -1,0 +1,6 @@
+{
+  "name": "Antrian Bulog Wargaluyu",
+  "description": "Sistem Antrian Penyaluran Beras Bulog Desa Wargaluyu, Kecamatan Arjasari, Kabupaten Bandung. Realtime, responsif, dan mudah digunakan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
