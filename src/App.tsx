@@ -28,7 +28,8 @@ import {
   ListRestart,
   Minimize2,
   Maximize2,
-  Monitor
+  Monitor,
+  Copy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { initSupabaseClient, getSupabaseCredentials } from './supabaseClient';
@@ -382,6 +383,27 @@ export default function App() {
 
   // Auto Synchronize Clock Ref
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+  // Synchronize dynamic URL credentials if scanned from QR Code/Shared Link
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlParam = params.get('supa_url');
+      const keyParam = params.get('supa_key');
+      if (urlParam && keyParam) {
+        localStorage.setItem('bulog_supabase_url', decodeURIComponent(urlParam));
+        localStorage.setItem('bulog_supabase_anon_key', decodeURIComponent(keyParam));
+        
+        // Clear parameters immediately to keep URL pristine
+        const cleanedUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanedUrl);
+        
+        // Force reload and refresh state seamlessly
+        alert('✅ Sinkronisasi Berhasil Nama!\nPerangkat Handphone/Laptop Anda telah saling terhubung melalui database online Supabase secara realtime!');
+        window.location.reload();
+      }
+    }
+  }, []);
 
   // Listen to address changes (SPA routing)
   useEffect(() => {
@@ -1715,6 +1737,35 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* WARNING CARD IF RUNNING IN LOCAL / OFFLINE BACKUP MODE */}
+                {connectionStatus !== 'connected' && (
+                  <div className="bg-amber-50 dark:bg-amber-950/20 border-2 border-amber-400 dark:border-amber-900/50 p-5 rounded-3xl flex flex-col space-y-3 shadow-md">
+                    <div className="flex items-start space-x-3">
+                      <span className="text-2xl mt-0.5 shrink-0 select-none">⚠️</span>
+                      <div className="space-y-1">
+                        <p className="font-display font-extrabold text-[12px] text-amber-700 dark:text-amber-400 tracking-wider uppercase">
+                          PERANGKAT ANDA BELUM SINKRON!
+                        </p>
+                        <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                          Handphone (HP) operator Anda saat ini berjalan terpisah dengan layar Laptop/TV karena database <strong>Supabase</strong> belum diatur di HP ini. 
+                        </p>
+                        <p className="text-[11px] leading-normal text-slate-550 dark:text-slate-400 italic">
+                          *Perubahan antrian yang Anda panggil dari HP <b>tidak akan mempengaruhi</b> tampilan layar Laptop.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-amber-200/40 dark:border-amber-900/30 flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-between gap-2">
+                      <span className="text-[10px] text-slate-500 font-medium">Cara sinkronisasi instan lewat QR ada di bawah:</span>
+                      <button
+                        onClick={() => setShowConfigModal(true)}
+                        className="py-1.5 px-3 bg-amber-400 hover:bg-amber-500 active:scale-95 text-slate-950 font-bold rounded-xl text-xs uppercase cursor-pointer transition-all shadow-sm text-center"
+                      >
+                        Pasang Supabase / Sync QR Sekarang
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* ACTIVE QUEUE CONTROLS CARD */}
                 <div className={`p-6 rounded-3xl shadow-lg border relative overflow-hidden ${themeMode === 'dark' ? 'bg-slate-900 border-slate-850' : 'bg-white border-slate-150'}`}>
                   
@@ -2202,6 +2253,52 @@ export default function App() {
                   </button>
                 </div>
               </form>
+
+              {/* DYNAMIC QR CODE & LINK SHARING FOR REALTIME WORKFLOW SYNC */}
+              {(() => {
+                const activeSupaCreds = getSupabaseCredentials();
+                if (!activeSupaCreds.url || !activeSupaCreds.key) return null;
+                const shareLink = typeof window !== 'undefined'
+                  ? `${window.location.origin}?supa_url=${encodeURIComponent(activeSupaCreds.url)}&supa_key=${encodeURIComponent(activeSupaCreds.key)}`
+                  : '';
+                const qrCodeUrl = shareLink
+                  ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(shareLink)}`
+                  : '';
+
+                return (
+                  <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-center">
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-white mb-1.5 flex items-center justify-center space-x-1.5">
+                      <span>📱 SINKRONISASI KE HP SANGAT MUDAH</span>
+                    </h4>
+                    <p className="text-[10px] text-slate-400 mb-4 leading-normal px-2">
+                      Pindai kode QR di bawah menggunakan kamera HP operator Anda atau salin link untuk otomatis menghubungkan HP Anda ke database yang sama!
+                    </p>
+                    
+                    <div className="inline-block bg-white p-3 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm mb-4">
+                      <img
+                        src={qrCodeUrl}
+                        alt="QR Code Sinkronisasi"
+                        className="w-36 h-36 object-contain mx-auto"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+
+                    <div className="px-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(shareLink);
+                          alert('✅ Link Sinkronisasi Berhasil Tersalin!\nKirimkan link ini ke WhatsApp HP Operator / buka di HP Anda untuk auto-sync.');
+                        }}
+                        className="w-full flex items-center justify-center space-x-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-3 py-2.5 rounded-xl text-xs font-bold transition-all border border-emerald-150 dark:border-emerald-900/30 cursor-pointer"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Salin Link Sinkronisasi</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="mt-4 pt-3 border-t text-center dark:border-slate-800 text-[10px] text-slate-400 select-none uppercase tracking-wide">
                 Desa Wargaluyu • Pangan Bulog Mandiri
