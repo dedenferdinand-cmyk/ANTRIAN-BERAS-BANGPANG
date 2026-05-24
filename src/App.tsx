@@ -362,16 +362,32 @@ export default function App() {
   const [tempSupaKey, setTempSupaKey] = useState<string>('');
 
   // Primary Queue State
-  const [currentQueue, setCurrentQueue] = useState<CurrentQueue>({
-    id: '1',
-    nomor_sekarang: 0,
-    nomor_sebelumnya: 0,
-    total_antrian: DEFAULT_TOTAL_ANTRIAN,
-    status: 'Mulai Penyaluran Beras',
-    updated_at: new Date().toISOString()
+  const [currentQueue, setCurrentQueue] = useState<CurrentQueue>(() => {
+    const stored = localStorage.getItem('bulog_queue_state');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (_) {}
+    }
+    return {
+      id: '1',
+      nomor_sekarang: 0,
+      nomor_sebelumnya: 0,
+      total_antrian: DEFAULT_TOTAL_ANTRIAN,
+      status: 'Mulai Penyaluran Beras',
+      updated_at: new Date().toISOString()
+    };
   });
 
-  const [logs, setLogs] = useState<QueueLog[]>([]);
+  const [logs, setLogs] = useState<QueueLog[]>(() => {
+    const stored = localStorage.getItem('bulog_queue_logs');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (_) {}
+    }
+    return [];
+  });
   const [connectionMode, setConnectionMode] = useState<'supabase' | 'local'>('local');
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'local_storage'>('local_storage');
   
@@ -421,6 +437,38 @@ export default function App() {
     };
     window.addEventListener('popstate', handleLocationChange);
     return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
+
+  // HTML5 storage event sync (Realtime local sync for dual-tab / extended screen displays on same laptop)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'bulog_queue_state' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setCurrentQueue(parsed);
+        } catch (_) {}
+      }
+      if (e.key === 'bulog_queue_logs' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setLogs(parsed);
+        } catch (_) {}
+      }
+      if (e.key === 'bulog_selected_voice' && e.newValue) {
+        setSelectedVoiceName(e.newValue);
+      }
+      if (e.key === 'bulog_voice_pitch' && e.newValue) {
+        setVoicePitch(parseFloat(e.newValue));
+      }
+      if (e.key === 'bulog_voice_rate' && e.newValue) {
+        setVoiceRate(parseFloat(e.newValue));
+      }
+      if (e.key === 'bulog_audio_unlocked' && e.newValue) {
+        setAudioUnlocked(e.newValue === 'true');
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const navigateTo = (pathUrl: string) => {
@@ -1154,8 +1202,8 @@ export default function App() {
                 </>
               ) : (
                 <>
-                  <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
-                  <span className="text-slate-500 dark:text-slate-400 font-medium tracking-tight">BACKUP LOKAL (OFFLINE)</span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
+                  <span className="text-blue-600 dark:text-blue-400 font-bold tracking-tight">🖥️ SINKRON DUAL-LAYAR LOKAL</span>
                 </>
               )}
             </div>
@@ -1788,34 +1836,36 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* WARNING CARD IF RUNNING IN LOCAL / OFFLINE BACKUP MODE */}
-                {connectionStatus !== 'connected' && (
-                  <div className="bg-amber-50 dark:bg-amber-950/20 border-2 border-amber-400 dark:border-amber-900/50 p-5 rounded-3xl flex flex-col space-y-3 shadow-md">
-                    <div className="flex items-start space-x-3">
-                      <span className="text-2xl mt-0.5 shrink-0 select-none">⚠️</span>
-                      <div className="space-y-1">
-                        <p className="font-display font-extrabold text-[12px] text-amber-700 dark:text-amber-400 tracking-wider uppercase">
-                          PERANGKAT ANDA BELUM SINKRON!
-                        </p>
-                        <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-                          Handphone (HP) operator Anda saat ini berjalan terpisah dengan layar Laptop/TV karena database <strong>Supabase</strong> belum diatur di HP ini. 
-                        </p>
-                        <p className="text-[11px] leading-normal text-slate-550 dark:text-slate-400 italic">
-                          *Perubahan antrian yang Anda panggil dari HP <b>tidak akan mempengaruhi</b> tampilan layar Laptop.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="pt-2 border-t border-amber-200/40 dark:border-amber-900/30 flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-between gap-2">
-                      <span className="text-[10px] text-slate-500 font-medium">Cara sinkronisasi instan lewat QR ada di bawah:</span>
-                      <button
-                        onClick={() => setShowConfigModal(true)}
-                        className="py-1.5 px-3 bg-amber-400 hover:bg-amber-500 active:scale-95 text-slate-950 font-bold rounded-xl text-xs uppercase cursor-pointer transition-all shadow-sm text-center"
-                      >
-                        Pasang Supabase / Sync QR Sekarang
-                      </button>
+                {/* DUAL SCREEN LAPTOP + TV SYNC GUIDE */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-900 dark:to-slate-850 border-2 border-blue-450 dark:border-slate-700 p-5 rounded-3xl flex flex-col space-y-3.5 shadow-md">
+                  <div className="flex items-start space-x-3">
+                    <span className="text-2xl shrink-0 select-none">🖥️</span>
+                    <div className="space-y-1">
+                      <p className="font-display font-extrabold text-[12px] text-blue-750 dark:text-blue-400 tracking-wider uppercase flex items-center space-x-1.5">
+                        <span>SINKRONISASI DUAL-LAYAR LAPTOP + TV AKSES</span>
+                        <span className="bg-emerald-550 text-white text-[8px] px-1.5 py-0.5 rounded font-black font-sans tracking-normal animate-pulse">AKTIF (100% OFFLINE)</span>
+                      </p>
+                      <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300 font-sans">
+                        Anda dapat menampilkan antrian pada <b>TV Aula</b> dan mengontrol panggilan melalui <b>Layar Laptop</b> yang sama secara instan tanpa membutuhkan koneksi internet atau HP!
+                      </p>
                     </div>
                   </div>
-                )}
+                  
+                  <div className="text-[11px] leading-relaxed text-slate-650 dark:text-slate-400 space-y-2 border-t border-slate-150 dark:border-slate-800/80 pt-3">
+                    <p className="font-bold text-slate-800 dark:text-slate-200 mb-1">Cara Setup Antrian Dua Layar (Laptop ke TV):</p>
+                    <ol className="list-decimal pl-4.5 space-y-1 font-sans">
+                      <li>Hubungkan Laptop Anda ke TV menggunakan kabel <b>HDMI</b> atau VGA.</li>
+                      <li>Tekan tombol keyboard <kbd className="bg-slate-200 dark:bg-slate-700 px-1 py-0.5 rounded font-bold font-mono">Windows + P</kbd> lalu pilih opsi <b>"Extend"</b> (Tampilkan Layar Terpisah / Perpanjang Layar).</li>
+                      <li>Buka website antrian ini dalam 2 Jendela/Tab browser yang terpisah:
+                        <ul className="list-disc pl-4.5 mt-1 space-y-0.5 text-[10.5px]">
+                          <li><b>Layar TV:</b> Buka <span className="bg-slate-100 dark:bg-slate-800 px-1 rounded font-bold text-blue-600 dark:text-blue-400">Display TV (/)</span>, geser jendela tersebut ke layar TV, lalu aktifkan mode Fullscreen.</li>
+                          <li><b>Layar Laptop:</b> Buka <span className="bg-slate-150/85 dark:bg-slate-850 px-1 rounded font-bold text-emerald-600 dark:text-emerald-400">Panel Petugas (/admin)</span> tetap di monitor utama laptop Anda.</li>
+                        </ul>
+                      </li>
+                      <li>Kini, setiap tombol panggil yang Anda klik di laptop akan <b>mengubah TV aula secara instan dan mengeluarkan suara bel/TTS panggilan</b> secara offline tanpa perlu internet!</li>
+                    </ol>
+                  </div>
+                </div>
 
                 {/* ACTIVE QUEUE CONTROLS CARD */}
                 <div className={`p-6 rounded-3xl shadow-lg border relative overflow-hidden ${themeMode === 'dark' ? 'bg-slate-900 border-slate-850' : 'bg-white border-slate-150'}`}>
@@ -1832,8 +1882,8 @@ export default function App() {
                         </>
                       ) : (
                         <>
-                          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                          <span className="text-amber-600 font-bold">BACKUP LOKAL</span>
+                          <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                          <span className="text-blue-600 font-bold">DUAL-LAYAR LOKAL</span>
                         </>
                       )}
                     </div>
