@@ -735,6 +735,7 @@ export default function App() {
     // Create log record
     const dummyLogId = String(Date.now());
     let logsToCreate: QueueLog[] = [];
+    const isReset = logAction === 'RESET';
 
     if (customLogs && customLogs.length > 0) {
       logsToCreate = customLogs.map((cl, idx) => ({
@@ -754,7 +755,8 @@ export default function App() {
       ];
     }
 
-    const newLogsList = [...logsToCreate, ...logs].slice(0, 500);
+    // If it is a RESET action, clear the previous logs history completely (for TV & Laptop sync)
+    const newLogsList = isReset ? [] : [...logsToCreate, ...logs].slice(0, 500);
     localStorage.setItem('bulog_queue_logs', JSON.stringify(newLogsList));
     setLogs(newLogsList);
 
@@ -774,13 +776,18 @@ export default function App() {
 
         if (queueErr) throw queueErr;
 
-        // Insert logs to database in parallel if multiple, or sequentially
-        for (const logItem of logsToCreate) {
-          await supabase.from('logs').insert({
-            nomor: logItem.nomor,
-            action: logItem.action,
-            created_at: freshTimestamp
-          });
+        if (isReset) {
+          // If reset, clear all logs in the database table
+          await supabase.from('logs').delete().gt('id', 0);
+        } else {
+          // Insert logs to database in parallel if multiple, or sequentially
+          for (const logItem of logsToCreate) {
+            await supabase.from('logs').insert({
+              nomor: logItem.nomor,
+              action: logItem.action,
+              created_at: freshTimestamp
+            });
+          }
         }
       } catch (err) {
         console.warn('Gagal sinkronisasi Supabase, fallback aktif:', err);
@@ -1071,13 +1078,14 @@ export default function App() {
   }, [kpmStatuses, currentQueue.nomor_sekarang, logs]);
 
   // Extract count of successfully served families
+  // Extract count of successfully served families
   const totalCompletedCount = useMemo(() => {
     return Object.values(kpmStatuses).filter(status => status === 'SELESAI').length;
   }, [kpmStatuses]);
 
-  // Calculated Progress parameters
+  // Calculated Progress parameters (Synced with actual "Selesai" / Completed KPMs)
   const percentProgress = currentQueue.total_antrian > 0 
-    ? Math.min(100, Math.round((currentQueue.nomor_sekarang / currentQueue.total_antrian) * 100)) 
+    ? Math.min(100, Math.round((totalCompletedCount / currentQueue.total_antrian) * 100)) 
     : 0;
 
   const currentStatusString = currentQueue.status || 'Menuju Meja Verifikasi';
@@ -1361,7 +1369,7 @@ export default function App() {
                         <div className="flex items-center justify-between text-xs md:text-sm font-semibold text-slate-400 mb-2">
                           <span>Progres Antrian Penyaluran Bahan Pangan:</span>
                           <span className="font-mono bg-slate-950 text-slate-350 py-1 px-3 rounded-lg text-xs font-bold border border-slate-800">
-                            {currentQueue.nomor_sekarang} dari {currentQueue.total_antrian} Keluarga Penerima Manfaat (KPM)
+                            {totalCompletedCount} dari {currentQueue.total_antrian} Keluarga Penerima Manfaat (KPM) Selesai
                           </span>
                         </div>
 
@@ -1614,8 +1622,8 @@ export default function App() {
                   <div className="border-t border-slate-100 dark:border-slate-800 pt-6 mt-4">
                     <div className="flex items-center justify-between text-xs md:text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2">
                       <span>Progres Antrian Beras Hari Ini:</span>
-                      <span className="font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-1 px-3 rounded-lg text-xs font-bold">
-                        {currentQueue.nomor_sekarang} dari {currentQueue.total_antrian} Keluarga Penerima Manfaat (KPM)
+                      <span className="font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-1 px-3 rounded-lg text-xs font-bold font-sans">
+                        {totalCompletedCount} dari {currentQueue.total_antrian} Keluarga Penerima Manfaat (KPM) Selesai
                       </span>
                     </div>
 
