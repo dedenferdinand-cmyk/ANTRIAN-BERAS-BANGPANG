@@ -448,9 +448,9 @@ export default function App() {
           setCurrentQueue(parsed);
         } catch (_) {}
       }
-      if (e.key === 'bulog_queue_logs' && e.newValue) {
+      if (e.key === 'bulog_queue_logs') {
         try {
-          const parsed = JSON.parse(e.newValue);
+          const parsed = e.newValue ? JSON.parse(e.newValue) : [];
           setLogs(parsed);
         } catch (_) {}
       }
@@ -608,14 +608,19 @@ export default function App() {
       )
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'logs' },
+        { event: '*', schema: 'public', table: 'logs' },
         (payload) => {
-          const newLog = payload.new as QueueLog;
-          setLogs(prev => {
-            const updated = [newLog, ...prev.filter(l => l.id !== newLog.id)].slice(0, 500);
-            localStorage.setItem('bulog_queue_logs', JSON.stringify(updated));
-            return updated;
-          });
+          if (payload.eventType === 'DELETE') {
+            setLogs([]);
+            localStorage.setItem('bulog_queue_logs', '[]');
+          } else if (payload.eventType === 'INSERT') {
+            const newLog = payload.new as QueueLog;
+            setLogs(prev => {
+              const updated = [newLog, ...prev.filter(l => l.id !== newLog.id)].slice(0, 500);
+              localStorage.setItem('bulog_queue_logs', JSON.stringify(updated));
+              return updated;
+            });
+          }
         }
       )
       .subscribe((status) => {
@@ -777,8 +782,8 @@ export default function App() {
         if (queueErr) throw queueErr;
 
         if (isReset) {
-          // If reset, clear all logs in the database table
-          await supabase.from('logs').delete().gt('id', 0);
+          // If reset, clear all logs in the database table safely (not using gt(id) for UUID safety)
+          await supabase.from('logs').delete().not('action', 'is', null);
         } else {
           // Insert logs to database in parallel if multiple, or sequentially
           for (const logItem of logsToCreate) {
