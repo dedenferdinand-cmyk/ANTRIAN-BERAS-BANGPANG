@@ -29,7 +29,8 @@ import {
   Minimize2,
   Maximize2,
   Monitor,
-  Copy
+  Copy,
+  Megaphone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { initSupabaseClient, getSupabaseCredentials } from './supabaseClient';
@@ -38,6 +39,52 @@ import { CurrentQueue, QueueLog } from './types';
 // Standard fallback values
 const DEFAULT_TOTAL_ANTRIAN = 1138;
 const DEFAULT_ADMIN_PASSWORD = 'wargaluyubisa';
+
+// Pre-defined Announcement presets for operator
+const ANNOUNCEMENT_PRESETS = [
+  {
+    id: 'syarat_ambil',
+    title: 'Persyaratan Pengambilan Bantuan',
+    icon: '📢',
+    text: 'Mohon perhatian, berikut adalah informasi mengenai persyaratan pengambilan bantuan pangan desa. Pertama, jika diwakilkan oleh anggota keluarga yang berada dalam satu Kartu Keluarga, berkas yang harus dibawa adalah: KTP asli dan fotokopi penerima, KTP asli dan fotokopi yang mewakili, serta fotokopi Kartu Keluarga. Kedua, jika diwakilkan oleh orang lain yang berbeda Kartu Keluarga, berkas yang harus dibawa adalah: KTP asli dan fotokopi penerima, fotokopi Kartu Keluarga penerima, KTP asli dan fotokopi yang mewakili, serta fotokopi Kartu Keluarga yang mewakili. Harap siapkan seluruh dokumen tersebut untuk mempermudah proses verifikasi petugas panitia. Terima kasih.',
+    desc: 'Syarat dokumen perwakilan satu KK atau perwakilan beda KK.'
+  },
+  {
+    id: 'bebas_pintu',
+    title: 'Akses Pintu Keluar Masuk Aula',
+    icon: '🚪',
+    text: 'Dihimbau kepada seluruh bapak, ibu, dan warga penerima manfaat. Demi kenyamanan, ketertiban, dan kelancaran bersama, dimohon untuk tidak berdiri, berkumpul, atau menghalangi jalan di depan pintu masuk dan pintu keluar aula balai desa. Untuk bapak dan ibu yang telah menyelesaikan verifikasi atau sedang memindahkan beras bantuan Bulog, mohon dapat lewat dengan aman, dan berikan jalan yang lapang bagi warga lain yang berlalu-lalang serta petugas pelaksana. Kerjasama Anda sangat dihargai agar acara berjalan dengan baik dan lancar. Terima kasih.',
+    desc: 'Mengingatkan warga agar tidak berkerumun menghalangi pintu keluar-masuk.'
+  },
+  {
+    id: 'tertib',
+    title: 'Himbauan Tertib Antrian',
+    icon: '🗣️',
+    text: 'Mohon perhatian kepada seluruh Keluarga Penerima Manfaat bantuan pangan desa. Untuk menjaga kelancaran dan ketertiban bersama selama kegiatan penyaluran beras ini berlangsung, dimohon bapak, ibu, dan seluruh hadirin agar tetap berada di area antrian utama dengan tertib, menjaga jarak, serta bersabar menunggu panggilan nomor antrian Anda. Harap tidak saling berdesakan. Atas kesabaran dan kerjasamanya kami ucapkan banyak terima kasih.',
+    desc: 'Himbauan warga agar rapi, berbaris tertib, dan tidak berdesakan.'
+  },
+  {
+    id: 'berkas',
+    title: 'Persiapan Berkas Administrasi',
+    icon: '📄',
+    text: 'Kepada seluruh Keluarga Penerima Manfaat yang memegang nomor antrian berikutnya, dimohon bantuan untuk segera mempersiapkan berkas dokumen administrasi pendukung Anda sekarang. Berkas yang diperlukan meliputi: Kartu Tanda Penduduk asli, Kartu Keluarga asli, serta Surat Undangan resmi penerimaan bantuan pangan dari desa. Mohon pastikan dokumen Anda sudah lengkap demi mempercepat proses verifikasi di meja petugas kami. Terima kasih.',
+    desc: 'Mengingatkan warga menyiapkan KTP, KK, dan surat undangan.'
+  },
+  {
+    id: 'cek_beras',
+    title: 'Pengecekan Kondisi Beras',
+    icon: '🌾',
+    text: 'Himbauan ramah bagi bapak dan ibu penerima manfaat yang telah selesai diverifikasi dan menerima karung beras bantuan pangan Bulog sebesar sepuluh kilogram. Sebelum Anda meninggalkan area aula desa, dimohon untuk memeriksa kembali kondisi fisik karung beras Anda serta kualitas beras di dalamnya secara teliti. Jika ada kendala fisik atau kualitas yang kurang baik, harap segera melaporkannya kepada panitia petugas di lokasi agar dapat dibantu lebih lanjut sebelum Anda pulang. Terima kasih.',
+    desc: 'Himbauan memeriksa kondisi fisik karung & kualitas beras.'
+  },
+  {
+    id: 'istirahat',
+    title: 'Istirahat / Jeda Layanan',
+    icon: '☕',
+    text: 'Pengumuman penting bagi seluruh peserta antrian bantuan pangan Desa Wargaluyu. Demi menjaga stamina petugas, pelayanan verifikasi pembagian beras bantuan pangan akan dinonaktifkan sementara untuk jeda istirahat petugas selama kurang lebih lima belas menit ke depan. Layanan verifikasi antrian akan segera kami buka kembali secara normal setelah masa istirahat selesai. Kami memohon maaf atas ketidaknyamanan bapak ibu, dan terima kasih atas kesediaannya menunggu.',
+    desc: 'Pengumuman jeda istirahat verifikasi bantuan selama 15 menit.'
+  }
+];
 
 // Web Audio API Ding-Dong synthesiser
 const playChime = () => {
@@ -74,7 +121,46 @@ const playChime = () => {
     osc2.start(now + 0.18);
     osc2.stop(now + 1.0);
   } catch (err) {
-    console.error('Gagal memutar bunyi chime:', err);
+    console.error('Gagal memputar bunyi chime:', err);
+  }
+};
+
+// Web Audio API Airport Chime Synthesizer - Realistic high-end 4-tone chime progression (F-Major Arpeggio)
+const playAirportChime = () => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+
+    // Harmonious airport arpeggio: F4 (349Hz) -> A4 (440Hz) -> C5 (523Hz) -> F5 (698Hz)
+    const tones = [
+      { freq: 349.23, delay: 0.0, duration: 1.5, vol: 0.18 },
+      { freq: 440.00, delay: 0.22, duration: 1.5, vol: 0.18 },
+      { freq: 523.25, delay: 0.44, duration: 1.5, vol: 0.20 },
+      { freq: 698.46, delay: 0.66, duration: 2.0, vol: 0.22 }
+    ];
+
+    tones.forEach((tone) => {
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(tone.freq, now + tone.delay);
+      
+      gainNode.gain.setValueAtTime(0, now);
+      gainNode.gain.setValueAtTime(0, now + tone.delay);
+      gainNode.gain.linearRampToValueAtTime(tone.vol, now + tone.delay + 0.05);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + tone.delay + tone.duration);
+      
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      osc.start(now + tone.delay);
+      osc.stop(now + tone.delay + tone.duration);
+    });
+  } catch (err) {
+    console.error('Gagal memutar bunyi chime bandara:', err);
   }
 };
 
@@ -270,19 +356,28 @@ const SvgBulogLogo = ({ className }: { className?: string }) => (
   </svg>
 );
 
-// Indonesian TTS Narrator Voice announcement - Optimized for Female voice with User Config fallbacks
-const speakIndonesian = (number: number) => {
+// Indonesian TTS Narrator Voice engine - General purpose speaking helper
+const speakText = (text: string, cancelCurrent: boolean = true) => {
   if (!('speechSynthesis' in window)) return;
   try {
-    window.speechSynthesis.cancel(); // Stop any pending spoken texts immediately
+    if (cancelCurrent) {
+      window.speechSynthesis.cancel(); // Stop any pending spoken texts immediately
+      window.dispatchEvent(new CustomEvent('bulog_announcement_end'));
+    }
     
-    const text = `Nomor antrian ${number}. Silakan menuju meja verifikasi.`;
-    const utterance = new SpeechSynthesisUtterance(text);
+    // Clean emojis and decorative elements from synthesized text so TTS engine speaks it correctly
+    const cleanSpeechText = text
+      .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, '') // strip emojis
+      .replace(/✅|📢/g, '')
+      .replace(/\*/g, '')
+      .trim();
+
+    const utterance = new SpeechSynthesisUtterance(cleanSpeechText);
     utterance.lang = 'id-ID';
     
     // Read live preferences from localStorage so it respects settings instantly
     const savedVoiceName = localStorage.getItem('bulog_selected_voice') || '';
-    const savedPitch = parseFloat(localStorage.getItem('bulog_voice_pitch') || '1.25');
+    const savedPitch = parseFloat(localStorage.getItem('bulog_voice_pitch') || '1.15');
     const savedRate = parseFloat(localStorage.getItem('bulog_voice_rate') || '0.85');
     
     utterance.rate = savedRate;
@@ -333,10 +428,121 @@ const speakIndonesian = (number: number) => {
       }
     }
 
+    // Hook events to sync the AI Presenter avatar in real-time
+    utterance.onstart = () => {
+      window.dispatchEvent(new CustomEvent('bulog_announcement_start', { detail: { text } }));
+    };
+    utterance.onend = () => {
+      window.dispatchEvent(new CustomEvent('bulog_announcement_end'));
+    };
+    utterance.onerror = () => {
+      window.dispatchEvent(new CustomEvent('bulog_announcement_end'));
+    };
+
     window.speechSynthesis.speak(utterance);
   } catch (error) {
     console.error('Gagal memproses pengumuman suara:', error);
+    window.dispatchEvent(new CustomEvent('bulog_announcement_end'));
   }
+};
+
+// Play immersive airport chime first, then read announcement with brief classic delay
+const speakTextWithChime = (text: string) => {
+  if (!('speechSynthesis' in window)) return;
+  try {
+    // Stop any currently running speech
+    window.speechSynthesis.cancel();
+    window.dispatchEvent(new CustomEvent('bulog_announcement_end'));
+    
+    // Play the magnificent four-tone airport paging bell chime
+    playAirportChime();
+    
+    // Delay speech to let the beautiful bell ring out and decay, sounding exactly like a real airport announcement
+    setTimeout(() => {
+      speakText(text, false); // Cancel false as we just did it
+    }, 1300);
+  } catch (err) {
+    console.error('Gagal memutar pengumuman ber-chime:', err);
+    speakText(text, true);
+  }
+};
+
+// Indonesian TTS Narrator Voice announcement - Uses speakText
+const speakIndonesian = (number: number) => {
+  speakText(`Nomor antrian ${number}. Silakan menuju meja verifikasi.`);
+};
+
+// AI Virtual Presenter component that shows a beautiful Indonesian female digital announcer speaking in real-time
+const AiPresenterVideoFeed = ({ text, isPlaying }: { text: string; isPlaying: boolean }) => {
+  return (
+    <AnimatePresence>
+      {isPlaying && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: 30 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 30 }}
+          className="fixed bottom-24 right-8 z-[200] w-full max-w-sm rounded-[2.5rem] border-4 border-amber-400 bg-slate-900/95 p-6 shadow-[0_0_50px_rgba(251,191,36,0.4)] text-white overflow-hidden backdrop-blur-md"
+        >
+          {/* Header Bar */}
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3.5 mb-4">
+            <div className="flex items-center space-x-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+              </span>
+              <span className="text-[10px] sm:text-xs font-display font-black tracking-widest text-slate-300 uppercase">
+                SIARAN LANGSUNG AI PRESENTER
+              </span>
+            </div>
+            <span className="bg-amber-400/10 text-amber-400 text-[10px] font-black px-2.5 py-0.5 rounded-full select-none">
+              SRI (SISTEM REALTIME INDONESIA)
+            </span>
+          </div>
+
+          <div className="flex flex-col items-center space-y-4">
+            {/* Visual Portrait Container */}
+            <div className="relative w-44 h-44 rounded-full overflow-hidden border-4 border-emerald-500/80 shadow-[0_0_25px_rgba(16,185,129,0.4)] bg-slate-950">
+              {/* Pulsing ring waves around the portrait to represent speech audio waves */}
+              <div className="absolute inset-x-0 bottom-0 top-0 rounded-full animate-ping border border-emerald-500/20 pointer-events-none scale-105"></div>
+              
+              {/* Generated image of beautiful female announcer */}
+              <img
+                src="/src/assets/images/ai_presenter_avatar_1779724325849.png"
+                alt="AI Presenter Sri"
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover transition-all duration-300 scale-105 animate-pulse"
+              />
+
+              {/* Live soundwave overlay effect */}
+              {isPlaying && (
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-end space-x-1 px-3 py-1 rounded-full bg-slate-900/95 border border-slate-800 shadow-lg scale-90">
+                  <div className="w-1 bg-emerald-400 rounded-full h-3 animate-pulse"></div>
+                  <div className="w-1 bg-emerald-400 rounded-full h-5 animate-pulse" style={{ animationDelay: '0.15s' }}></div>
+                  <div className="w-1 bg-emerald-400 rounded-full h-4 animate-pulse" style={{ animationDelay: '0.3s' }}></div>
+                  <div className="w-1 bg-emerald-400 rounded-full h-2 animate-pulse" style={{ animationDelay: '0.45s' }}></div>
+                </div>
+              )}
+            </div>
+
+            {/* Speaking subtitles textbox */}
+            <div className="w-full text-center bg-slate-950/80 border border-slate-800/60 p-3.5 rounded-2xl">
+              <span className="block text-[8px] font-black text-slate-500 tracking-widest uppercase mb-1 font-mono">
+                TEKS BANTUAN SUARA SEKARANG
+              </span>
+              <p className="text-[11px] leading-relaxed text-slate-200 line-clamp-3 select-none italic font-sans font-medium">
+                "{text || 'Memproses berkas antrian KPM...'}"
+              </p>
+            </div>
+            
+            <div className="flex items-center space-x-1.5 text-[9px] text-slate-500 font-mono">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-spin" />
+              <span>Teknologi Sintesis Audio Pemerintahan Desa AI</span>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 };
 
 export default function App() {
@@ -349,6 +555,29 @@ export default function App() {
   );
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
   const [isTvFullscreen, setIsTvFullscreen] = useState<boolean>(false);
+  
+  // States to track active speech announcement and toggle the AI Voice Presenter in real-time
+  const [isPlayingAnnouncement, setIsPlayingAnnouncement] = useState<boolean>(false);
+  const [currentAnnouncementText, setCurrentAnnouncementText] = useState<string>('');
+
+  useEffect(() => {
+    const handleStart = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      setIsPlayingAnnouncement(true);
+      setCurrentAnnouncementText(customEvent.detail?.text || '');
+    };
+    const handleEnd = () => {
+      setIsPlayingAnnouncement(false);
+      setCurrentAnnouncementText('');
+    };
+
+    window.addEventListener('bulog_announcement_start', handleStart);
+    window.addEventListener('bulog_announcement_end', handleEnd);
+    return () => {
+      window.removeEventListener('bulog_announcement_start', handleStart);
+      window.removeEventListener('bulog_announcement_end', handleEnd);
+    };
+  }, []);
   
   // Custom Voice Preferences State
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -396,6 +625,10 @@ export default function App() {
   
   // Track last announced log identifier to prevent duplicate loops
   const lastCallEventRef = useRef<string>('');
+  const queueChannelRef = useRef<any>(null);
+
+  // Announcement state editor
+  const [customAnnouncementText, setCustomAnnouncementText] = useState<string>('');
 
   // Auto Synchronize Clock Ref
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
@@ -465,6 +698,17 @@ export default function App() {
       }
       if (e.key === 'bulog_audio_unlocked' && e.newValue) {
         setAudioUnlocked(e.newValue === 'true');
+      }
+      if (e.key === 'bulog_play_announcement' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed.action === 'STOP') {
+            window.speechSynthesis.cancel();
+            window.dispatchEvent(new CustomEvent('bulog_announcement_end'));
+          } else if (parsed.text) {
+            speakTextWithChime(parsed.text);
+          }
+        } catch (_) {}
       }
     };
     window.addEventListener('storage', handleStorageChange);
@@ -623,6 +867,24 @@ export default function App() {
           }
         }
       )
+      .on(
+        'broadcast',
+        { event: 'announcement' },
+        (payload) => {
+          const text = payload.payload?.text;
+          if (text) {
+            speakTextWithChime(text);
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'announcement_stop' },
+        () => {
+          window.speechSynthesis.cancel();
+          window.dispatchEvent(new CustomEvent('bulog_announcement_end'));
+        }
+      )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           setConnectionStatus('connected');
@@ -630,6 +892,8 @@ export default function App() {
           setConnectionStatus('reconnecting');
         }
       });
+
+    queueChannelRef.current = queueChannel;
 
     // Auto reconnect timer
     const reconnectInterval = setInterval(() => {
@@ -683,6 +947,7 @@ export default function App() {
       clearInterval(reconnectInterval);
       clearInterval(fallbackSyncInterval);
       supabase.removeChannel(queueChannel);
+      queueChannelRef.current = null;
     };
   }, [tempSupaUrl, tempSupaKey]);
 
@@ -899,6 +1164,51 @@ export default function App() {
       'ULANG',
       `Memanggil ulang nomor antrian ${currentQueue.nomor_sekarang}`
     );
+  };
+
+  const handlePlayAnnouncement = (text: string) => {
+    if (!text.trim()) {
+      alert('Silakan tulis isi teks pengumuman suara terlebih dahulu!');
+      return;
+    }
+    
+    // Play locally instantly with beautiful airport chime
+    speakTextWithChime(text);
+
+    // Sync via LocalStorage (for same-laptop dual tab sync)
+    localStorage.setItem('bulog_play_announcement', JSON.stringify({
+      id: Date.now(),
+      text
+    }));
+
+    // Broadcast via Supabase (for cross-device realtime sync)
+    if (queueChannelRef.current) {
+      queueChannelRef.current.send({
+        type: 'broadcast',
+        event: 'announcement',
+        payload: { text }
+      });
+    }
+  };
+
+  const handleStopAnnouncement = () => {
+    // Cancel locally instantly
+    window.speechSynthesis.cancel();
+
+    // Trigger localstorage stop
+    localStorage.setItem('bulog_play_announcement', JSON.stringify({
+      id: Date.now(),
+      text: '',
+      action: 'STOP'
+    }));
+
+    // Broadcast stop via Supabase
+    if (queueChannelRef.current) {
+      queueChannelRef.current.send({
+        type: 'broadcast',
+        event: 'announcement_stop'
+      });
+    }
   };
 
   const handleCompleteCurrent = () => {
@@ -1765,6 +2075,9 @@ export default function App() {
 
           </div>
         )}
+
+        {/* AI Voice Announcer Presenter Overlay - rendered in both normal and fullscreen TV screen */}
+        <AiPresenterVideoFeed text={currentAnnouncementText} isPlaying={isPlayingAnnouncement} />
       </>
     )}
 
@@ -2071,6 +2384,124 @@ export default function App() {
                         <span>RESET ULANG ANTRIAN MULAI DARI AWAL (0)</span>
                       </button>
 
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* 🎙️ PENYIARAN PENGUMUMAN SUARA (AUDIO ANNOUNCEMENTS) */}
+                <div className={`p-6 rounded-3xl shadow-lg border relative overflow-hidden ${themeMode === 'dark' ? 'bg-slate-900 border-slate-850' : 'bg-white border-slate-150'}`}>
+                  
+                  {/* Decorative glowing wave or broadcasting header */}
+                  <div className="flex items-center justify-between border-b pb-3 mb-4 border-slate-100 dark:border-slate-800 select-none">
+                    <div className="flex items-center space-x-2">
+                      <Megaphone className="w-5 h-5 text-emerald-600 dark:text-emerald-400 animate-bounce" />
+                      <span className="text-xs font-display font-black text-slate-850 dark:text-slate-100 tracking-tight uppercase">Penyiaran Pengumuman Suara</span>
+                    </div>
+                    {/* Tiny animated soundwave bars to look professional */}
+                    <div className="flex items-end space-x-0.5 h-3">
+                      <div className="w-0.5 bg-emerald-500 rounded-full animate-pulse h-1 bg-gradient-to-t from-emerald-400 to-green-500"></div>
+                      <div className="w-0.5 bg-emerald-500 rounded-full animate-pulse h-2 bg-gradient-to-t from-emerald-400 to-green-500" style={{ animationDelay: '0.1s' }}></div>
+                      <div className="w-0.5 bg-emerald-500 rounded-full animate-pulse h-3 bg-gradient-to-t from-emerald-400 to-green-500" style={{ animationDelay: '0.2s' }}></div>
+                      <div className="w-0.5 bg-emerald-500 rounded-full animate-pulse h-1.5 bg-gradient-to-t from-emerald-400 to-green-500" style={{ animationDelay: '0.3s' }}></div>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed mb-4 font-sans">
+                    Fasilitas pengeras suara pengumuman atau peraturan tertib antrian di sela-sela kegiatan penyaluran bantuan beras pangan. Suara pengumuman akan otomatis terdengar di <b>Layar TV Aula</b> maupun laptop secara sinkron!
+                  </p>
+
+                  {/* CUSTOM ANNOUNCEMENT TEXT WRITER */}
+                  <div className="space-y-3.5">
+                    <div>
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 font-sans">Teks Pengumuman Kustom / Diedit:</span>
+                      <textarea
+                        value={customAnnouncementText}
+                        onChange={(e) => setCustomAnnouncementText(e.target.value)}
+                        placeholder="Contoh: Bapak Ibu penerima beras Bulog, mohon duduk tenang di area luar, siapkan KTP dan KK asli Anda... "
+                        className="w-full min-h-[90px] p-3 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none text-black dark:text-white placeholder-slate-400 dark:placeholder-slate-500 leading-relaxed font-sans font-medium"
+                      />
+                    </div>
+
+                    {/* Action buttons (Play, Stop, Clear) */}
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handlePlayAnnouncement(customAnnouncementText)}
+                        disabled={!customAnnouncementText.trim()}
+                        className={`flex-1 py-3 px-4 rounded-xl text-white font-semibold text-xs transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-md ${
+                          customAnnouncementText.trim() 
+                            ? 'bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white' 
+                            : 'bg-slate-300 dark:bg-slate-800 text-slate-500 cursor-not-allowed'
+                        }`}
+                      >
+                        <Megaphone className="w-4 h-4" />
+                        <span>PUTAR PENGUMUMAN SEKARANG</span>
+                      </button>
+
+                      <button
+                        onClick={handleStopAnnouncement}
+                        className="py-3 px-3.5 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-950/60 dark:text-red-450 dark:hover:bg-red-900 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1 active:scale-95 transition-all shadow-xs cursor-pointer"
+                        title="Hentikan / Senapkan Semua Pengumuman Sedang Berjalan"
+                      >
+                        <VolumeX className="w-4 h-4" />
+                        <span className="hidden sm:inline">OFF</span>
+                      </button>
+                    </div>
+
+                    {/* QUICK ACCESSIBLE PRESETS */}
+                    <div className="border-t border-slate-100 dark:border-slate-800/80 pt-4 mt-3">
+                      <div className="flex justify-between items-center mb-2.5">
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Template Pengumuman Cepat:</span>
+                        {customAnnouncementText.trim() && (
+                          <button 
+                            onClick={() => setCustomAnnouncementText('')}
+                            className="text-[10px] text-zinc-500 hover:text-red-500 font-semibold cursor-pointer"
+                          >
+                            × Kosongkan Teks
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                        {ANNOUNCEMENT_PRESETS.map((preset) => (
+                          <div 
+                            key={preset.id} 
+                            className="p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/65 bg-slate-50/50 dark:bg-slate-855/40 hover:bg-slate-50 dark:hover:bg-slate-850 flex items-start justify-between space-x-2.5 transition-colors group"
+                          >
+                            <div className="flex items-start space-x-2 pt-0.5">
+                              <span className="text-base select-none shrink-0">{preset.icon}</span>
+                              <div>
+                                <span className="block text-[11px] font-bold text-slate-850 dark:text-slate-200">{preset.title}</span>
+                                <span className="block text-[9.5px] text-slate-400 font-normal leading-tight mt-0.5">{preset.desc}</span>
+                              </div>
+                            </div>
+                            
+                            <div className="flex space-x-1 shrink-0">
+                              {/* Load button */}
+                              <button
+                                onClick={() => setCustomAnnouncementText(preset.text)}
+                                className="py-1 px-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 text-blue-750 border border-blue-100 dark:border-blue-900/40 rounded-lg text-[9.5px] font-bold transition-all active:scale-[0.96] cursor-pointer"
+                                title="Klik untuk edit teks di atas terlebih dahulu"
+                              >
+                                Edit Teks
+                              </button>
+
+                              {/* Instantly play button */}
+                              <button
+                                onClick={() => {
+                                  // Speak + edit visual sync
+                                  setCustomAnnouncementText(preset.text);
+                                  handlePlayAnnouncement(preset.text);
+                                }}
+                                className="p-1 px-[7.5px] bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[9.5px] font-bold transition-all active:scale-[0.96] flex items-center space-x-1 cursor-pointer"
+                                title="Putar langsung lewat speaker"
+                              >
+                                <Volume2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
                   </div>
