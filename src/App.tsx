@@ -40,6 +40,9 @@ import { CurrentQueue, QueueLog } from './types';
 const DEFAULT_TOTAL_ANTRIAN = 1138;
 const DEFAULT_ADMIN_PASSWORD = 'wargaluyubisa';
 
+// Global registry of played announcement IDs to prevent double/continuous looping on same/other sync tabs
+const processedAnnouncementIds = new Set<string>();
+
 // Pre-defined Announcement presets for operator
 const ANNOUNCEMENT_PRESETS = [
   {
@@ -706,6 +709,13 @@ export default function App() {
             window.speechSynthesis.cancel();
             window.dispatchEvent(new CustomEvent('bulog_announcement_end'));
           } else if (parsed.text) {
+            const announcementId = parsed.id ? String(parsed.id) : '';
+            if (announcementId) {
+              if (processedAnnouncementIds.has(announcementId)) {
+                return; // already processed, do not repeat!
+              }
+              processedAnnouncementIds.add(announcementId);
+            }
             speakTextWithChime(parsed.text);
           }
         } catch (_) {}
@@ -872,7 +882,14 @@ export default function App() {
         { event: 'announcement' },
         (payload) => {
           const text = payload.payload?.text;
+          const announcementId = payload.payload?.id ? String(payload.payload.id) : '';
           if (text) {
+            if (announcementId) {
+              if (processedAnnouncementIds.has(announcementId)) {
+                return; // already processed, do not repeat!
+              }
+              processedAnnouncementIds.add(announcementId);
+            }
             speakTextWithChime(text);
           }
         }
@@ -1172,12 +1189,16 @@ export default function App() {
       return;
     }
     
+    // Generate unique ID for this play instance, log it locally so we ignore duplicate sync reflects
+    const announcementId = Date.now().toString() + '_' + Math.random().toString(36).substring(2, 7);
+    processedAnnouncementIds.add(announcementId);
+
     // Play locally instantly with beautiful airport chime
     speakTextWithChime(text);
 
     // Sync via LocalStorage (for same-laptop dual tab sync)
     localStorage.setItem('bulog_play_announcement', JSON.stringify({
-      id: Date.now(),
+      id: announcementId,
       text
     }));
 
@@ -1186,7 +1207,7 @@ export default function App() {
       queueChannelRef.current.send({
         type: 'broadcast',
         event: 'announcement',
-        payload: { text }
+        payload: { id: announcementId, text }
       });
     }
   };
@@ -1643,18 +1664,11 @@ export default function App() {
                         </span>
                       </div>
 
-                      {/* LCD Board Display */}
+                      {/* LCD Board Display - Standard Legible Clean Typography */}
                       <div className="py-2 flex-1 flex flex-col justify-center items-center">
-                        <div className="relative inline-block my-1 bg-black p-8 md:p-12 rounded-[2.5rem] border-8 border-slate-800 shadow-[inset_0_0_40px_rgba(0,0,0,0.9)] min-w-[280px] md:min-w-[400px]">
-                          {/* LCD Background segments simulation */}
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none">
-                            <span className="text-[14rem] md:text-[20rem] lg:text-[23rem] font-digital font-black tracking-tighter text-white">
-                              888
-                            </span>
-                          </div>
-                          
-                          {/* Real glowing digits */}
-                          <span className="relative z-10 text-[14rem] md:text-[20rem] lg:text-[23rem] font-digital font-black leading-none tracking-tighter text-blue-450 text-digital-glow">
+                        <div className="relative inline-block my-1 bg-slate-950 px-16 md:px-24 py-8 rounded-[3rem] border-8 border-slate-800 shadow-[0_0_40px_rgba(245,158,11,0.15),inset_0_0_30px_rgba(0,0,0,0.9)] min-w-[320px] md:min-w-[440px] text-center">
+                          {/* Real highly readable clean numbers */}
+                          <span className="relative z-10 text-[14rem] md:text-[20rem] lg:text-[23rem] font-sans font-black leading-none tracking-tight text-amber-400 drop-shadow-[0_4px_16px_rgba(0,0,0,0.8)] select-none">
                             {currentQueue.nomor_sekarang || '00'}
                           </span>
                         </div>
@@ -1710,7 +1724,7 @@ export default function App() {
                     {/* Live Large Clock panel */}
                     <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-2xl text-center flex flex-col justify-center items-center backdrop-blur-xs min-h-[140px]">
                       <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest block mb-2">JAM DIGITAL DESA (UTC+7)</span>
-                      <div className="font-digital text-4xl md:text-5xl font-bold text-amber-400 text-digital-glow-amber select-none tracking-widest">
+                      <div className="font-mono text-4xl md:text-5xl font-black text-amber-400 select-none tracking-wide">
                         {formatIndoTime(currentTime)}
                       </div>
                       <div className="text-xs text-emerald-300 font-bold mt-2 uppercase tracking-wide">
@@ -1756,7 +1770,7 @@ export default function App() {
                                 }`}
                               >
                                 <span className="text-xs text-slate-400 font-sans font-medium">Panggilan terakhir {i === 0 ? '(Lalu)' : ''}</span>
-                                <span className={`font-digital text-2xl font-bold ${i === 0 ? 'text-blue-400 text-digital-glow' : 'text-slate-500'}`}>
+                                <span className={`font-sans text-2xl font-black ${i === 0 ? 'text-blue-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]' : 'text-slate-500'}`}>
                                   No. {num}
                                 </span>
                               </div>
@@ -1900,14 +1914,9 @@ export default function App() {
                       NOMOR ANTRIAN YANG SEDANG DIPANGGIL
                     </p>
 
-                    <div className="relative inline-block bg-black p-6 md:p-8 px-12 md:px-16 rounded-[2rem] border-4 border-slate-800 shadow-[inset_0_0_30px_rgba(0,0,0,0.9)] max-w-xs md:max-w-md w-full">
-                      {/* LCD Background segments simulation */}
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none">
-                        <span className="text-[10rem] md:text-[14rem] lg:text-[15rem] font-digital font-black tracking-tighter text-white">
-                          888
-                        </span>
-                      </div>
-                      <span className="relative z-10 font-digital text-[10rem] md:text-[14rem] lg:text-[15rem] font-black leading-none tracking-tighter text-blue-450 text-digital-glow">
+                    <div className="relative inline-block bg-slate-950 py-6 px-16 rounded-[2.5rem] border-4 border-slate-850 shadow-[0_0_25px_rgba(245,158,11,0.1),inset_0_0_20px_rgba(0,0,0,0.8)] max-w-xs md:max-w-sm w-full text-center">
+                      {/* Real highly readable clean numbers */}
+                      <span className="relative z-10 font-sans text-[10rem] md:text-[14rem] lg:text-[15rem] font-black leading-none tracking-tight text-amber-400 drop-shadow-[0_4px_10px_rgba(0,0,0,0.55)] select-none">
                         {currentQueue.nomor_sekarang || '00'}
                       </span>
                     </div>
@@ -2075,9 +2084,6 @@ export default function App() {
 
           </div>
         )}
-
-        {/* AI Voice Announcer Presenter Overlay - rendered in both normal and fullscreen TV screen */}
-        <AiPresenterVideoFeed text={currentAnnouncementText} isPlaying={isPlayingAnnouncement} />
       </>
     )}
 
@@ -2167,7 +2173,7 @@ export default function App() {
                   <div className="flex items-start space-x-3">
                     <span className="text-2xl shrink-0 select-none">🖥️</span>
                     <div className="space-y-1">
-                      <p className="font-display font-extrabold text-[12px] text-blue-750 dark:text-blue-400 tracking-wider uppercase flex items-center space-x-1.5">
+                      <p className="font-display font-extrabold text-[12px] text-blue-600 dark:text-blue-400 tracking-wider uppercase flex items-center space-x-1.5">
                         <span>SINKRONISASI DUAL-LAYAR LAPTOP + TV AKSES</span>
                         <span className="bg-emerald-550 text-white text-[8px] px-1.5 py-0.5 rounded font-black font-sans tracking-normal animate-pulse">AKTIF (100% OFFLINE)</span>
                       </p>
@@ -2480,7 +2486,7 @@ export default function App() {
                               {/* Load button */}
                               <button
                                 onClick={() => setCustomAnnouncementText(preset.text)}
-                                className="py-1 px-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 text-blue-750 border border-blue-100 dark:border-blue-900/40 rounded-lg text-[9.5px] font-bold transition-all active:scale-[0.96] cursor-pointer"
+                                className="py-1 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-200 text-black dark:text-black border border-slate-300 dark:border-slate-400 rounded-lg text-[10px] font-black transition-all active:scale-[0.96] cursor-pointer shadow-xs"
                                 title="Klik untuk edit teks di atas terlebih dahulu"
                               >
                                 Edit Teks
@@ -2856,6 +2862,9 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* AI Voice Announcer Presenter Overlay - Rendered globally over all screens (Normal TV, Fullscreen TV, and Operator panel) */}
+      <AiPresenterVideoFeed text={currentAnnouncementText} isPlaying={isPlayingAnnouncement} />
 
     </div>
   );
